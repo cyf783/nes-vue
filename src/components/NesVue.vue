@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, effect, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { createDB } from 'src/db'
-import type { Controller, EmitErrorObj, SaveData, SavedOrLoaded } from 'src/types'
+import { createIndexDB, createLocalStoreDB } from 'src/db'
+import type { Controller, EmitErrorObj, Idb, SaveData, SavedOrLoaded } from 'src/types'
 import { audioFrame, audioStop, resume, setGain, suspend } from 'src/audio'
 import { HEIGHT, WIDTH, animationFrame, animationStop, cut, fitInParent } from 'src/animation'
 import { download_canvas, get_fill_arr, is_empty_obj, is_not_void, is_void } from '@taiyuuki/utils'
@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<{
     label?: string
     gain?: number
     noClip?: boolean
-    storage?: boolean
+    storage?: Idb | 'indexedDB' | 'localStorage'
     debugger?: boolean
     turbo?: number
     dbName?: string
@@ -36,7 +36,7 @@ const props = withDefaults(defineProps<{
     label: 'Game Start',
     gain: 100,
     noClip: false,
-    storage: false,
+    storage: 'localStorage',
     debugger: false,
     turbo: 16,
     dbName: 'nes-vue',
@@ -66,7 +66,7 @@ const emitControllerState = useController(props)
 
 const cvs = useElement<HTMLCanvasElement>()
 const isStop = ref<boolean>(true)
-const db = createDB<SaveData>(props.dbName, 'save_data')
+const db = props.storage === 'indexedDB' ? createIndexDB<SaveData>(props.dbName, 'save_data') : (props.storage === 'localStorage' ? createLocalStoreDB<SaveData>() : props.storage);
 let isPaused = false
 
 let fpsStamp: number
@@ -154,7 +154,7 @@ function start(url: string = props.url) {
                     message: `${url} loading Error: ${req.statusText}`,
                 })
             }
-            req.onload = function() {
+            req.onload = function () {
                 if (this.status === 200) {
                     rom.buffer = this.responseText
                     loadROM(rom.buffer)
@@ -224,69 +224,6 @@ function loadGameData(saveData: SaveData) {
     loadNesData(saveData, emitError, props.url)
 }
 
-function saveInStorage(id: string) {
-    if (checkId(id)) {
-        return
-    }
-    try {
-        localStorage.setItem(id, JSON.stringify(getNesData(props.url)))
-        emit('saved', {
-            id,
-            message: 'The state has been saved in localStorage',
-            target: 'localStorage',
-        })
-    } catch (e: any) {
-        if (e.name === 'QuotaExceededError') {
-            return emitError({
-                code: 1,
-                message: 'Save Error: localStorage out of memory.',
-            })
-        }
-    }
-}
-
-function loadInStorage(id: string) {
-    if (checkId(id)) {
-        return
-    }
-    const saveDataString = localStorage.getItem(id)
-    if (!saveDataString) {
-        return emitError({
-            code: 2,
-            message: 'Load Error: nothing to load.',
-        })
-    }
-    loadGameData(JSON.parse(saveDataString))
-    emit('loaded', {
-        id,
-        message: 'Loaded state from localStorage',
-        target: 'localStorage',
-    })
-}
-
-function saveIndexedDB(id: string) {
-    if (checkId(id)) {
-        return
-    }
-    try {
-        db.set_item(id, getNesData(props.url))
-    } catch (_) {
-        emitError({
-            code: 1,
-            message: 'Save Error: Unable to save data to indexedDB.',
-        })
-    }
-}
-
-function loadIndexedDB(id: string) {
-    if (checkId(id)) {
-        return
-    }
-    db.get_item(id).then(data => {
-        loadGameData(data)
-    })
-}
-
 /**
  * 🎮: Save game state
  * @param id Game state id
@@ -316,10 +253,25 @@ function save(id: string) {
             message: 'Save Error: Can only be saved while the game is running.',
         })
     }
-    if (props.storage) {
-        saveInStorage(id)
-    } else {
-        saveIndexedDB(id)
+    try {
+        db.setItem(id, getNesData(props.url))
+        emit('saved', {
+            id,
+            message: `The state has been saved in ${db.dbName}`,
+            target: db.dbName,
+        })
+    } catch (e: any) {
+        if (e.name === 'QuotaExceededError') {
+            return emitError({
+                code: 1,
+                message: 'Save Error: localStorage out of memory.',
+            })
+        } else {
+            return emitError({
+                code: 1,
+                message: `Save Error: db [${db.dbName}].`,
+            })
+        }
     }
 }
 
@@ -352,13 +304,36 @@ function load(id: string) {
             message: 'Load Error: Can only be loaded when the game is running.',
         })
     }
-    if (props.storage) {
-        loadInStorage(id)
-    } else {
-        loadIndexedDB(id)
+    const res = db.getItem(id)
+    if (!res) {
+        return emitError({
+            code: 2,
+            message: 'Load Error: nothing to load.',
+        })
     }
-    if (isPaused) {
-        play()
+
+    if (res instanceof Promise) {
+        res.then(data => {
+            loadGameData(data)
+            emit('loaded', {
+                id,
+                message: `Loaded state from ${db.dbName}`,
+                target: db.dbName,
+            })
+            if (isPaused) {
+                play()
+            }
+        })
+    } else {
+        loadGameData(res)
+        emit('loaded', {
+            id,
+            message: `Loaded state from ${db.dbName}`,
+            target: db.dbName,
+        })
+        if (isPaused) {
+            play()
+        }
     }
 }
 
@@ -366,11 +341,7 @@ function remove(id: string) {
     if (checkId(id)) {
         return
     }
-    if (props.storage) {
-        localStorage.removeItem(id)
-    } else {
-        db.remove_item(id)
-    }
+    db.removeItem(id)
 }
 
 function clear() {
@@ -572,24 +543,15 @@ export default { name: 'NesVue' }
 </script>
 
 <template>
-  <div :style="canvasStyle">
-    <canvas
-      ref="cvs"
-      :width="WIDTH"
-      :height="HEIGHT"
-      style="display:inline-block"
-    />
-    <div
-      v-show="isStop"
-      style="position: absolute;top: 0;left: 0%; background-color: #000;width: 100%; height: 100%;"
-    />
-    <div
-      v-if="isStop"
-      style="position: absolute;top: 50%;left: 50%;transform: translate(-50%, -50%);cursor: pointer;color: #f8f4ed;font-size: 20px;"
-      @click="start()"
-    >
-      {{ label }}
+    <div :style="canvasStyle">
+        <canvas ref="cvs" :width="WIDTH" :height="HEIGHT" style="display:inline-block" />
+        <div v-show="isStop"
+            style="position: absolute;top: 0;left: 0%; background-color: #000;width: 100%; height: 100%;" />
+        <div v-if="isStop"
+            style="position: absolute;top: 50%;left: 50%;transform: translate(-50%, -50%);cursor: pointer;color: #f8f4ed;font-size: 20px;"
+            @click="start()">
+            {{ label }}
+        </div>
     </div>
-  </div>
 </template>
 ../types

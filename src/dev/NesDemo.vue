@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import NesVue from 'src/components/NesVue.vue'
 import { useInstance } from 'src/composables/use-instance'
 import { vGamepad } from 'src/directives/v-gamepad'
-import type { Controller } from 'src/types'
+import type { Controller, Idb } from 'src/types'
 import type { EmitErrorObj } from '..'
 
 const nes = useInstance<typeof NesVue>()
@@ -75,6 +75,29 @@ function cheatCode() {
 function disableCheatCode() {
     nes.value.cancelCheatCode('079F-01-01')
 }
+const db = ref({
+    dbName:'localStorage111',
+    setItem(id, data) {
+      if (typeof data === "object" && data !== null) {
+        localStorage.setItem(id, JSON.stringify(data));
+      } else {
+        localStorage.setItem(id, data);
+      }
+    },
+    getItem(id) {
+      const res = localStorage.getItem(id);
+      try {
+        if (res) return JSON.parse(res);
+      } catch (error) {}
+      return res;
+    },
+    removeItem(id) {
+      localStorage.removeItem(id);
+    },
+    clear() {
+      localStorage.clear();
+    },
+  } as Idb)
 </script>
 
 <template>
@@ -87,6 +110,7 @@ function disableCheatCode() {
       height="480"
       no-clip
       db-name="my-nes"
+      :storage="db"
       debugger
       @error="onError"
     />
