@@ -224,6 +224,10 @@ function loadGameData(saveData: SaveData) {
     loadNesData(saveData, emitError, props.url)
 }
 
+function getGameData() {
+    return getNesData(props.url);
+}
+
 /**
  * 🎮: Save game state
  * @param id Game state id
@@ -531,6 +535,8 @@ defineExpose({
     cheatCode,
     cancelCheatCode,
     cancelCheatCodeAll,
+    getGameData,
+    loadGameData,
 
     // memory,
     // prev,
