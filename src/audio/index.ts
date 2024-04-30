@@ -56,12 +56,14 @@ function audioFrame() {
 }
 
 function audioStop() {
-    script_processor.disconnect(audio_ctx.destination)
-    script_processor.onaudioprocess = null
-    script_processor = {} as ScriptProcessorNode
+    if(script_processor && script_processor.disconnect){
+        script_processor.disconnect(audio_ctx.destination)
+        script_processor.onaudioprocess = null
+        script_processor = {} as ScriptProcessorNode
 
-    if ('close' in audio_ctx) {
-        audio_ctx.close()
+        if ('close' in audio_ctx) {
+            audio_ctx.close()
+        }
     }
 }
 

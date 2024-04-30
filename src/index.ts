@@ -8,5 +8,6 @@ export type {
     NesVueProps,
     EmitErrorObj,
     SavedOrLoaded,
+    SaveData,
 } from 'src/types'
 export { NesVue, nes, vGamepad }

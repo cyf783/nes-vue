@@ -75,6 +75,12 @@ function cheatCode() {
 function disableCheatCode() {
     nes.value.cancelCheatCode('079F-01-01')
 }
+function aaa() {
+  gameUrl.value="https://dream1986.github.io/nesrom/100合1.NES"
+}
+function bbb() {
+  gameUrl.value="https://taiyuuki.github.io/vscode-nes/roms/魂斗罗.nes"
+}
 const db = ref({
     dbName:'localStorage111',
     setItem(id, data) {
@@ -151,6 +157,12 @@ const db = ref({
     </button>
     <button @click="clear">
       Clear
+    </button>
+    <button @click="aaa">
+      aaa
+    </button>
+    <button @click="bbb">
+      bbb
     </button>
   </div>
   <div>
